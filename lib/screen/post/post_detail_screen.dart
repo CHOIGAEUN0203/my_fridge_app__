@@ -22,6 +22,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   bool _isLoading = true;
   String? _error;
   Map<String, dynamic>? _recipe;
+  bool _isSharing = false;
 
   @override
   void initState() {
@@ -43,7 +44,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       if (response.statusCode == 200) {
         final data = jsonDecode(utf8.decode(response.bodyBytes));
 
-        // ✅ ingredients가 String이면 jsonDecode로 변환
+        // ✅ ingredients가 String이면 JSON 디코딩
         if (data['ingredients'] != null && data['ingredients'] is String) {
           try {
             data['ingredients'] = jsonDecode(data['ingredients']);
@@ -70,6 +71,62 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
   }
 
+  // ✅ 커뮤니티 공유 API
+  Future<void> _shareToCommunity() async {
+    setState(() {
+      _isSharing = true;
+    });
+
+    try {
+      final baseUrl = dotenv.env['API_URL']!;
+      final response = await http.post(
+        Uri.parse("$baseUrl/api/my-recipes/${widget.recipeId}/share"),
+        headers: {
+          "Authorization": "Bearer ${widget.jwtToken}",
+          "Content-Type": "application/json",
+        },
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        // ✅ 성공 알림
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("커뮤니티에 성공적으로 공유되었습니다!"),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        // 실패 시 서버 메시지 출력
+        final message = utf8.decode(response.bodyBytes);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("공유 실패 (${response.statusCode}) : $message"),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("공유 중 오류 발생: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSharing = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -90,7 +147,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   Widget _buildContent() {
     final recipe = _recipe!;
 
-    // ✅ ingredients는 List<Map> 형태로 변환 후 사용
     List<dynamic> ingredients = [];
     if (recipe["ingredients"] != null && recipe["ingredients"] is List) {
       ingredients = recipe["ingredients"];
@@ -164,7 +220,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
                 // 재료 표시
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
@@ -212,6 +269,37 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   ),
                 ),
                 const SizedBox(height: 30),
+
+                // ✅ 공유 버튼
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _isSharing ? null : _shareToCommunity,
+                    icon: _isSharing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(Icons.share),
+                    label: Text(
+                      _isSharing ? "공유 중..." : "커뮤니티에 공유하기",
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF4F7CFF),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 40),
               ],
             ),
           ),
