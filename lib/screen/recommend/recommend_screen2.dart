@@ -1,4 +1,3 @@
-// 레시피 상세 확인
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -7,12 +6,14 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class RecommendScreen2 extends StatefulWidget {
   final String jwtToken;
-  final String recipeId; // 레시피 ID
+  final String recipeId;
+  final bool fromSearch; // ✅ SearchScreen에서 온 경우 구분용 플래그
 
   const RecommendScreen2({
     super.key,
     required this.jwtToken,
     required this.recipeId,
+    this.fromSearch = false, // 기본값 false
   });
 
   @override
@@ -28,42 +29,54 @@ class _RecommendScreen2State extends State<RecommendScreen2> {
     _recipeFuture = fetchRecipeDetails();
   }
 
- Future<Map<String, dynamic>> fetchRecipeDetails() async {
-  final baseUrl = dotenv.env['API_URL']!;
-  final url = Uri.parse("$baseUrl/api/recipes/details/${widget.recipeId}");
-
-  final response = await http.get(
-    url,
-    headers: {
-      'Authorization': 'Bearer ${widget.jwtToken}',
-      'Content-Type': 'application/json',
-    },
-  );
-  print("*^_^* RecommendScreen2에서 전달받은 recipeId: ${widget.recipeId}"); 
-
-  if (response.statusCode == 200) {
-    final decoded = json.decode(response.body);
-
-    // 혹시 전체가 리스트인지 확인
-    if (decoded is List) {
-      return {"data": decoded};
+  @override
+  void didUpdateWidget(covariant RecommendScreen2 oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.recipeId != widget.recipeId) {
+      setState(() {
+        _recipeFuture = fetchRecipeDetails();
+      });
     }
-
-    // 기본적으로 Map이면 그대로 반환
-    if (decoded is Map<String, dynamic>) {
-      return decoded;
-    }
-
-    throw Exception("예상치 못한 응답 구조: ${decoded.runtimeType}");
-  } else {
-    throw Exception('레시피 정보를 불러오는 데 실패했습니다.');
   }
-}
 
+  Future<Map<String, dynamic>> fetchRecipeDetails() async {
+    final baseUrl = dotenv.env['API_URL']!;
+    final endpoint = widget.fromSearch
+        ? "$baseUrl/api/recipes/details-db/${widget.recipeId}"
+        : "$baseUrl/api/recipes/details/${widget.recipeId}";
+
+    final url = Uri.parse(endpoint);
+
+    print("🍳 [RecommendScreen2] 요청 URL: $url");
+
+    final response = await http.get(
+      url,
+      headers: {
+        'Authorization': 'Bearer ${widget.jwtToken}',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    print("📡 응답 코드: ${response.statusCode}");
+
+    if (response.statusCode == 200) {
+      final decoded = json.decode(response.body);
+      print("📦 응답 데이터: $decoded");
+
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is List && decoded.isNotEmpty && decoded.first is Map<String, dynamic>) {
+        return decoded.first;
+      }
+      throw Exception("예상치 못한 응답 구조: ${decoded.runtimeType}");
+    } else {
+      throw Exception('레시피 정보를 불러오는 데 실패했습니다.');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF7F7F7),
       body: SafeArea(
         child: FutureBuilder<Map<String, dynamic>>(
           future: _recipeFuture,
@@ -77,33 +90,56 @@ class _RecommendScreen2State extends State<RecommendScreen2> {
             } else {
               final data = snapshot.data!;
 
-              // 🔹 백엔드 응답에 맞춰 파싱
-              final allIngredients =
-                  (data['allIngredients'] as String? ?? '').split(',').map((e) {
-                final parts = e.trim().split('|');
-                return {
-                  'name': parts.length > 0 ? parts[0].trim() : '',
-                  'amount': parts.length > 1 ? parts[1].trim() : ''
-                };
-              }).toList();
+              // ✅ 이름 통합
+              final name = data['name'] ?? data['recipeName'] ?? '추천 레시피';
 
-              final cookingSteps = (data['cookingSteps'] as List<dynamic>? ?? [])
-                  .map((e) => e.toString())
-                  .toList();
+              // ✅ 재료 목록
+              final ingredients = List<Map<String, dynamic>>.from(data['ingredients'] ?? []);
 
-              final nutrition =
-                  Map<String, dynamic>.from(data['nutrition'] ?? {});
+              // ✅ 조리 단계 — 이미지 URL 걸러내기
+              final cookingSteps = (data['steps'] as List?)
+                      ?.map((step) => step['description']?.toString() ?? '')
+                      .where((desc) =>
+                          desc.isNotEmpty &&
+                          !desc.startsWith('http://') &&
+                          !desc.startsWith('https://'))
+                      .toList() ??
+                  (data['cookingSteps'] as List?)
+                      ?.whereType<String>()
+                      .where((step) =>
+                          !step.startsWith('http://') &&
+                          !step.startsWith('https://'))
+                      .toList() ??
+                  [];
 
-              final sodiumTip = data['sodiumTip']?.toString() ?? '';
+              // ✅ 영양성분 처리 — details-db에는 없을 수 있음
+              final nutrition = {
+                "kcal": data['energy']?.toString().isNotEmpty == true
+                    ? data['energy'].toString()
+                    : '정보 없음',
+                "탄수화물": data['carbohydrate']?.toString().isNotEmpty == true
+                    ? data['carbohydrate'].toString()
+                    : '-',
+                "단백질": data['protein']?.toString().isNotEmpty == true
+                    ? data['protein'].toString()
+                    : '-',
+                "지방": data['fat']?.toString().isNotEmpty == true
+                    ? data['fat'].toString()
+                    : '-',
+                "나트륨": data['sodium']?.toString().isNotEmpty == true
+                    ? data['sodium'].toString()
+                    : '-',
+              };
+
+              final sodiumTip = data['tip']?.toString() ?? '';
 
               return SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 제목 (응답에 title이 없으면 recipeId 보여줌)
                     Text(
-                      '추천 레시피',
+                      name,
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
@@ -121,23 +157,29 @@ class _RecommendScreen2State extends State<RecommendScreen2> {
                     ),
                     const SizedBox(height: 24),
 
-                    // 재료
+                    // ✅ 재료 영역
                     const Text(
                       '이 요리를 위해 필요한 재료들이에요',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 12),
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
+                        color: Colors.white,
                         borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.grey.withOpacity(0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
                       child: Wrap(
                         spacing: 20,
                         runSpacing: 12,
-                        children: allIngredients
+                        children: ingredients
                             .map((ing) => IngredientRow(
                                   left: ing['name'] ?? '',
                                   right: ing['amount'] ?? '',
@@ -145,87 +187,136 @@ class _RecommendScreen2State extends State<RecommendScreen2> {
                             .toList(),
                       ),
                     ),
+
                     const SizedBox(height: 28),
 
-                    // 영양 성분
+                    // ✅ 영양 성분 영역
                     const Text(
                       '영양성분은 이렇게 구성됐어요',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        // 칼로리 원형 표시
-                        Container(
-                          width: 100,
-                          height: 100,
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.blue, width: 2),
-                            shape: BoxShape.circle,
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.grey.withOpacity(0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
                           ),
-                          alignment: Alignment.center,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                (nutrition['kcal']?.toString() ?? '0'),
-                                style: const TextStyle(
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 100,
+                            height: 100,
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.blue, width: 2),
+                              shape: BoxShape.circle,
+                            ),
+                            alignment: Alignment.center,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  (nutrition['kcal'] ?? '0'),
+                                  style: const TextStyle(
                                     fontSize: 22,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.blue),
-                              ),
-                              const Text(
-                                'Kcal',
-                                style: TextStyle(
-                                    fontSize: 16, color: Colors.blue),
-                              ),
-                            ],
+                                    color: Colors.blue,
+                                  ),
+                                ),
+                                const Text(
+                                  'Kcal',
+                                  style: TextStyle(fontSize: 16, color: Colors.blue),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 24),
-
-                        // 나머지 영양소 리스트
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: nutrition.entries
-                                .where((e) => e.key != 'kcal')
-                                .map((e) => NutrientRow(
-                                    label: e.key,
-                                    value: e.value.toString()))
-                                .toList(),
+                          const SizedBox(width: 24),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: nutrition.entries
+                                  .where((e) => e.key != 'kcal')
+                                  .map((e) => NutrientRow(
+                                        label: e.key,
+                                        value: e.value.toString(),
+                                      ))
+                                  .toList(),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
+
                     const SizedBox(height: 28),
 
-                    // 조리법
+                    // ✅ 조리법
                     const Text(
                       '이제 조리법을 알려드릴게요',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 12),
-                    ...List.generate(
-                      cookingSteps.length,
-                      (index) => RecipeStep(
-                          number: index + 1, text: cookingSteps[index]),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.grey.withOpacity(0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: cookingSteps.isEmpty
+                            ? [const Text("조리 단계 정보가 없습니다.")]
+                            : cookingSteps
+                                .map((step) => Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 8),
+                                      child: Text(
+                                        step,
+                                        style: const TextStyle(fontSize: 16, height: 1.5),
+                                      ),
+                                    ))
+                                .toList(),
+                      ),
                     ),
+
                     const SizedBox(height: 28),
 
-                    // 나트륨 팁
+                    // ✅ 나트륨 팁
                     if (sodiumTip.isNotEmpty) ...[
                       const Text(
                         '💡 나트륨 줄이는 꿀팁!',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
-                      Text(
-                        sodiumTip,
-                        style: const TextStyle(fontSize: 15, height: 1.5),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.withOpacity(0.1),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          sodiumTip,
+                          style: const TextStyle(fontSize: 15, height: 1.5),
+                        ),
                       ),
                     ],
                     const SizedBox(height: 120),
@@ -241,7 +332,7 @@ class _RecommendScreen2State extends State<RecommendScreen2> {
   }
 }
 
-// 재료 위젯
+// ✅ 재료 UI 위젯
 class IngredientRow extends StatelessWidget {
   final String left;
   final String right;
@@ -263,7 +354,7 @@ class IngredientRow extends StatelessWidget {
   }
 }
 
-// 영양 성분 위젯
+// ✅ 영양성분 UI 위젯
 class NutrientRow extends StatelessWidget {
   final String label;
   final String value;
@@ -276,35 +367,17 @@ class NutrientRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
-          Text(label,
-              style:
-                  const TextStyle(fontSize: 14, fontWeight: FontWeight.w400)),
+          Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w400)),
           const Spacer(),
           Text(
             value,
             style: const TextStyle(
-                fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue),
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Colors.blue,
+            ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// 조리법 위젯
-class RecipeStep extends StatelessWidget {
-  final int number;
-  final String text;
-
-  const RecipeStep({required this.number, required this.text, super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Text(
-        '$number. $text',
-        style: const TextStyle(fontSize: 16, height: 1.5),
       ),
     );
   }

@@ -1,4 +1,3 @@
-// 냉장고에 재료 추가(검색) //
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -19,7 +18,7 @@ class _AddScreenState extends State<AddScreen> {
   bool isLoading = false;
   String? error;
 
-  // 전체 재료 불러오기
+  // ✅ 전체 재료 불러오기
   Future<void> fetchAllIngredients() async {
     setState(() {
       isLoading = true;
@@ -52,7 +51,7 @@ class _AddScreenState extends State<AddScreen> {
     }
   }
 
-  // 검색 API 호출
+  // ✅ 검색 API
   Future<void> searchIngredient(String query) async {
     if (query.isEmpty) {
       fetchAllIngredients();
@@ -99,55 +98,101 @@ class _AddScreenState extends State<AddScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("재료 추가")),
-      body: Column(
-        children: [
-          // 검색창
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: "재료를 검색하세요",
-                prefixIcon: const Icon(Icons.search),
-                filled: true,
-                fillColor: const Color(0xFFF5F5F5),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
+      backgroundColor: const Color(0xFFF7F7F7),
+      appBar: AppBar(
+        title: const Text(
+          "재료 추가",
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0.5,
+        iconTheme: const IconThemeData(color: Colors.black),
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // 🔍 검색창
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: TextField(
+                decoration: InputDecoration(
+                  hintText: "재료를 검색하세요",
+                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
+                onChanged: searchIngredient,
               ),
-              onChanged: searchIngredient,
             ),
-          ),
-          Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : error != null
-                    ? Center(child: Text(error!))
-                    : ListView.separated(
-                        itemCount: searchResults.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final item = searchResults[index];
-                          return ListTile(
-                            title: Text(item['name'] ?? '-'),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => AddScreenCustom1(
-                                    jwtToken: widget.jwtToken,
-                                    ingredientId: item['id'],
-                                    ingredientName: item['name'],
+
+            // 📋 검색 결과 목록
+            Expanded(
+              child: isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        color: Colors.grey,
+                      ),
+                    )
+                  : error != null
+                      ? Center(
+                          child: Text(
+                            error!,
+                            style: const TextStyle(color: Colors.redAccent),
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: fetchAllIngredients,
+                          child: ListView.separated(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            itemCount: searchResults.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 8),
+                            itemBuilder: (context, index) {
+                              final item = searchResults[index];
+                              return Container(
+                                margin:
+                                    const EdgeInsets.symmetric(horizontal: 12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: ListTile(
+                                  title: Text(
+                                    item['name'] ?? '-',
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
+                                  trailing: const Icon(
+                                    Icons.chevron_right,
+                                    color: Colors.grey,
+                                  ),
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => AddScreenCustom1(
+                                          jwtToken: widget.jwtToken,
+                                          ingredientId: item['id'],
+                                          ingredientName: item['name'],
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
                               );
                             },
-                          );
-                        },
-                      ),
-          ),
-        ],
+                          ),
+                        ),
+            ),
+          ],
+        ),
       ),
       bottomNavigationBar: BottomNav(jwtToken: widget.jwtToken),
     );

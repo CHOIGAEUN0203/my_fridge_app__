@@ -1,5 +1,3 @@
-//음식 검색하면 해당 레시피 확인 가능(미완)
-//페이지 연동 오류. 수정필요
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -7,9 +5,9 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:my_fridge_app__/screen/recommend/recommend_screen2.dart';
 import 'package:my_fridge_app__/widgets/bottom_nav.dart';
 
-// 1️⃣ Recipe 모델
+// ✅ Recipe 모델
 class Recipe {
-  final String id;
+  final int id;
   final String title;
 
   Recipe({required this.id, required this.title});
@@ -27,6 +25,7 @@ class _SearchScreen1State extends State<SearchScreen1> {
   List<Recipe> _recipes = [];
   List<Recipe> _filteredRecipes = [];
   bool _isLoading = false;
+  bool _dataLoaded = false;
 
   @override
   void initState() {
@@ -51,38 +50,45 @@ class _SearchScreen1State extends State<SearchScreen1> {
 
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body);
-        List<dynamic> dataList = [];
 
-        if (decoded is List) {
-          dataList = decoded;
-        } else if (decoded is Map && decoded['recipes'] is List) {
-          dataList = decoded['recipes'];
+        if (decoded is! List) throw Exception("Unexpected format: not a List");
+
+        if (decoded.isNotEmpty) {
+          print("📦 서버 응답 샘플: ${decoded.first}");
         }
 
-        final recipes = dataList.map((r) {
+        final recipes = decoded.map<Recipe>((r) {
           final map = r as Map<String, dynamic>;
-          return Recipe(
-            id: map['id']?.toString() ?? '',
-            title: map['name'] ?? '제목 없음',
-          );
-        }).toList();
+          final id = map['id'] ?? map['recipeId'] ?? 0;
+          final title = map['name'] ?? map['title'] ?? '제목 없음';
+          return Recipe(id: id, title: title);
+        }).where((r) => r.id != 0).toList();
 
         if (!mounted) return;
         setState(() {
           _recipes = recipes;
-          _filteredRecipes = recipes;
           _isLoading = false;
+          _dataLoaded = true;
         });
+
+        print("✅ 총 ${_recipes.length}개의 레시피 불러옴");
       } else {
+        print("❌ 서버 응답 코드: ${response.statusCode}");
         setState(() => _isLoading = false);
       }
     } catch (e) {
-      print("에러 발생: $e");
+      print("⚠️ 에러 발생: $e");
       setState(() => _isLoading = false);
     }
   }
 
   void _onSearchChanged(String query) {
+    if (!_dataLoaded) return;
+    if (query.isEmpty) {
+      setState(() => _filteredRecipes = []);
+      return;
+    }
+
     final filtered = _recipes.where((recipe) {
       return recipe.title.toLowerCase().contains(query.toLowerCase());
     }).toList();
@@ -92,70 +98,103 @@ class _SearchScreen1State extends State<SearchScreen1> {
 
   @override
   Widget build(BuildContext context) {
+    final baseUrl = dotenv.env['API_URL']!;
+
     return Scaffold(
+      backgroundColor: const Color(0xFFF7F7F7),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0.5,
+        title: const Text(
+          "레시피 검색",
+          style: TextStyle(
+            color: Colors.black,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        iconTheme: const IconThemeData(color: Colors.black),
+      ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 48),
               const Text(
-                '어떤 음식을 찾고있나요?',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                '🍲 어떤 음식을 찾고 있나요?',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 24),
-              // 검색창
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                height: 50,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.search, color: Colors.grey),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        decoration: const InputDecoration(
-                          hintText: "음식을 검색하세요",
-                          border: InputBorder.none,
-                        ),
-                        onChanged: _onSearchChanged,
-                      ),
-                    ),
-                  ],
+              const SizedBox(height: 16),
+
+              // 🔍 검색창
+              TextField(
+                onChanged: _onSearchChanged,
+                decoration: InputDecoration(
+                  hintText: "레시피 이름을 검색하세요",
+                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 16),
               const Divider(thickness: 0.7),
+
+              // 📋 검색 결과
               Expanded(
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
+                child: !_dataLoaded
+                    ? const Center(child: CircularProgressIndicator(color: Colors.grey))
                     : _filteredRecipes.isEmpty
-                        ? const Center(child: Text("검색 결과가 없습니다."))
-                        : ListView.builder(
-                            itemCount: _filteredRecipes.length,
-                            itemBuilder: (context, index) {
-                              final recipe = _filteredRecipes[index];
-                              return ListTile(
-                                title: Text(recipe.title),
-                                onTap: () {
-                                  print("📌 선택 레시피: ${recipe.title}, id: ${recipe.id}");
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => RecommendScreen2(
-                                        jwtToken: widget.jwtToken,
-                                        recipeId: recipe.id,
+                        ? const Center(
+                            child: Text(
+                              "검색어를 입력해주세요.",
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: fetchAllRecipes,
+                            child: ListView.separated(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              itemCount: _filteredRecipes.length,
+                              separatorBuilder: (_, __) => const SizedBox(height: 8),
+                              itemBuilder: (context, index) {
+                                final recipe = _filteredRecipes[index];
+                                return Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: ListTile(
+                                    title: Text(
+                                      recipe.title,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 16,
                                       ),
                                     ),
-                                  );
-                                },
-                              );
-                            },
+                                    trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+                                    onTap: () {
+                                      print("➡️ 선택한 레시피 ID: ${recipe.id}, 제목: ${recipe.title}");
+                                      print("🍳 RecommendScreen2로 이동: $baseUrl/api/recipes/details-db/${recipe.id}");
+
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => RecommendScreen2(
+                                            jwtToken: widget.jwtToken,
+                                            recipeId: recipe.id.toString(),
+                                            fromSearch: true,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
                           ),
               ),
             ],

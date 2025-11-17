@@ -116,29 +116,6 @@ class _CommunityScreenState extends State<CommunityScreen> {
               ),
               const SizedBox(height: 12),
 
-              // ✍️ 글 작성하기 버튼 (비활성용)
-              Align(
-                alignment: Alignment.centerRight,
-                child: ElevatedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("커뮤니티 글 작성 기능은 준비 중입니다.")),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEFEFEF),
-                    foregroundColor: Colors.black,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: const Text('글 작성하기'),
-                ),
-              ),
-              const SizedBox(height: 10),
-
               // 📄 게시글 목록
               Expanded(
                 child: _isLoading

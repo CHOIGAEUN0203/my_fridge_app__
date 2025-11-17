@@ -84,7 +84,7 @@ Future<List<Recipe>> fetchRecommendedRecipes() async {
                 'AI가 현재 재료로\n만들 수 있는 요리를 추천했어요',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 30,
+                  fontSize: 26,
                   fontWeight: FontWeight.bold,
                 ),
               ),

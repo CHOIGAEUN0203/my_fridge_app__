@@ -1,4 +1,3 @@
-// o //
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/material.dart';
@@ -10,7 +9,7 @@ import 'package:my_fridge_app__/widgets/category_bar.dart';
 import 'package:my_fridge_app__/widgets/expiring_items.dart';
 import 'package:my_fridge_app__/widgets/ingredients_table.dart';
 
-// 모델 클래스
+// ✅ 모델 클래스
 class ExpiringFood {
   final int quantity;
   final String name;
@@ -61,13 +60,11 @@ class MainPageData {
   final String nickname;
   final List<ExpiringFood> expiringFoods;
   final List<AllFood> allFoods;
-  final Map<String, dynamic> foodTypePercentages;
 
   MainPageData({
     required this.nickname,
     required this.expiringFoods,
     required this.allFoods,
-    required this.foodTypePercentages,
   });
 
   factory MainPageData.fromJson(Map<String, dynamic> json) {
@@ -79,12 +76,9 @@ class MainPageData {
       allFoods: (json['allFoods'] as List)
           .map((e) => AllFood.fromJson(e))
           .toList(),
-      foodTypePercentages: json['foodTypePercentages'],
     );
   }
 }
-
-// ... (import, 모델 부분 동일)
 
 class HomeScreen extends StatelessWidget {
   final String jwtToken;
@@ -106,7 +100,45 @@ class HomeScreen extends StatelessWidget {
     }
   }
 
-  // 공통 빈 박스 위젯
+  /// ✅ 카테고리 비율 계산 함수 (상위 4개 + 기타, 내림차순 정렬)
+  Map<String, double> calculateFoodTypePercentages(List<AllFood> foods) {
+    if (foods.isEmpty) return {};
+
+    final Map<String, int> typeCounts = {};
+    for (var food in foods) {
+      typeCounts[food.type] = (typeCounts[food.type] ?? 0) + food.quantity;
+    }
+
+    final int total = typeCounts.values.fold(0, (a, b) => a + b);
+    if (total == 0) return {};
+
+    final sortedEntries = typeCounts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    final top4 = sortedEntries.take(4).toList();
+    final others = sortedEntries.skip(4).toList();
+    final int othersSum = others.fold(0, (sum, e) => sum + e.value);
+
+    // 비율 계산
+    final Map<String, double> result = {
+      for (var e in top4)
+        e.key: double.parse(((e.value / total) * 100).toStringAsFixed(1)),
+    };
+
+    if (othersSum > 0) {
+      result['기타'] =
+          double.parse(((othersSum / total) * 100).toStringAsFixed(1));
+    }
+
+    // ✅ 비율 내림차순 정렬해서 Map으로 다시 반환
+    final sortedResult = Map.fromEntries(
+      result.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value)),
+    );
+
+    return sortedResult;
+  }
+
   Widget buildEmptyBox(String text) {
     return Container(
       width: double.infinity,
@@ -114,14 +146,7 @@ class HomeScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade300),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(color: Colors.grey.shade200),
       ),
       child: Center(
         child: Text(
@@ -135,7 +160,7 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF7F7F7),
       body: SafeArea(
         child: FutureBuilder<MainPageData>(
           future: fetchMainPageData(),
@@ -149,37 +174,31 @@ class HomeScreen extends StatelessWidget {
             }
 
             final data = snapshot.data!;
-
-            // ✨ 임박 재료 3개 제한
-            final expiringFoodsLimited =
-                data.expiringFoods.take(3).toList();
-
-            // ✨ 전체 재료 6개 제한
-            final allFoodsLimited =
-                data.allFoods.take(6).toList();
+            final expiringFoodsLimited = data.expiringFoods.take(3).toList();
+            final allFoodsLimited = data.allFoods.take(6).toList();
+            final calculatedPercentages =
+                calculateFoodTypePercentages(data.allFoods);
 
             return SingleChildScrollView(
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20.0,
-                  vertical: 24.0,
-                ),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 인사말
+                    // 👋 인사말
                     RichText(
                       text: TextSpan(
                         style: const TextStyle(
                           fontFamily: 'Pretendard-Bold',
-                          fontSize: 36,
+                          fontSize: 34,
                           color: Colors.black,
                         ),
                         children: [
                           TextSpan(
                             text: '${data.nickname}',
                             style: const TextStyle(
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.bold,
                               color: Color(0xFF4F7CFF),
                             ),
                           ),
@@ -189,32 +208,34 @@ class HomeScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 28),
 
-                    // 냉장고 구성 비율
                     const Text(
                       '냉장고 구성은 이렇게 되어있어요',
                       style: TextStyle(
                         fontSize: 20,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
                       ),
                     ),
                     const SizedBox(height: 12),
-                    CategoryBar(percentages: data.foodTypePercentages),
 
-                    // 유통기한 임박 재료
+                    // ✅ 비율 반영된 카테고리 바
+                    CategoryBar(percentages: calculatedPercentages),
+
+                    const SizedBox(height: 24),
                     const Text(
                       '유통기한이 얼마 남지 않았어요',
                       style: TextStyle(
                         fontSize: 20,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
                       ),
                     ),
                     const SizedBox(height: 12),
                     expiringFoodsLimited.isEmpty
                         ? buildEmptyBox('등록된 재료가 없어요')
                         : ExpiringItems(items: expiringFoodsLimited),
-                    const SizedBox(height: 32),
 
-                    // 전체 재료 한눈에 보기
+                    const SizedBox(height: 32),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -222,7 +243,8 @@ class HomeScreen extends StatelessWidget {
                           '전체 재료 한눈에 보기',
                           style: TextStyle(
                             fontSize: 20,
-                            fontWeight: FontWeight.w500,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
                           ),
                         ),
                         GestureDetector(
@@ -237,7 +259,8 @@ class HomeScreen extends StatelessWidget {
                           },
                           child: const Text(
                             '추천받으러 가기 >',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                            style:
+                                TextStyle(fontSize: 12, color: Colors.grey),
                           ),
                         ),
                       ],
@@ -270,7 +293,7 @@ class HomeScreen extends StatelessWidget {
                         },
                         child: const Text(
                           '자세히 보기 ▲',
-                          style: TextStyle(fontSize: 12),
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
                         ),
                       ),
                     ),

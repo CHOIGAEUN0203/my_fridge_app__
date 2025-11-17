@@ -1,3 +1,4 @@
+// ✅ CategoryBar.dart
 import 'package:flutter/material.dart';
 
 class CategoryBar extends StatelessWidget {
@@ -7,36 +8,25 @@ class CategoryBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 서버에서 받은 percentages를 기반으로 categories 생성
-    final categories = [
-      {
-        'label': '육류',
-        'color': const Color(0xFFE57373),
-        'ratio': (percentages['meat'] ?? 0).toDouble()
-      },
-      {
-        'label': '과일/야채류',
-        'color': const Color(0xFF81C784),
-        'ratio': (percentages['fruitVeg'] ?? 0).toDouble()
-      },
-      {
-        'label': '수산물',
-        'color': const Color(0xFF64B5F6),
-        'ratio': (percentages['seafood'] ?? 0).toDouble()
-      },
-      {
-        'label': '기타',
-        'color': const Color(0xFF9E9E9E),
-        'ratio': (percentages['etc'] ?? 0).toDouble()
-      },
-    ];
+    // 백엔드에서 받은 데이터를 기반으로 categories 생성
+    final categories = percentages.entries.map((entry) {
+      return {
+        'label': entry.key, // 백엔드에서 받은 실제 카테고리 이름
+        'color': _getColorForCategory(entry.key),
+        'ratio': (entry.value ?? 0).toDouble(),
+      };
+    }).toList();
+
+    // ✅ 비율(ratio) 기준 내림차순 정렬
+    categories.sort((a, b) => (b['ratio'] as double).compareTo(a['ratio'] as double));
 
     final totalRatio =
-        categories.fold<double>(0, (sum, item) => sum + item['ratio']);
+        categories.fold<double>(0, (sum, item) => sum + (item['ratio'] as double));
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 색상 그래프 바
+        // ✅ 색상 그래프 바
         ClipRRect(
           borderRadius: BorderRadius.circular(20),
           child: Row(
@@ -63,7 +53,8 @@ class CategoryBar extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        // 범례
+
+        // ✅ 범례 (왼쪽부터 내림차순으로)
         Wrap(
           spacing: 12,
           children: categories
@@ -81,7 +72,7 @@ class CategoryBar extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      item['label'],
+                      "${item['label']} (${item['ratio']}%)",
                       style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ],
@@ -91,5 +82,16 @@ class CategoryBar extends StatelessWidget {
         )
       ],
     );
+  }
+
+  // ✅ 카테고리 이름에 따른 색상 자동 지정
+  Color _getColorForCategory(String name) {
+    final lower = name.toLowerCase();
+
+    if (lower.contains('육')) return const Color(0xFFE57373); // 육류
+    if (lower.contains('과일')) return const Color(0xFFFFF176); // 노란색 - 과일
+    if (lower.contains('채소') || lower.contains('야채')) return const Color(0xFF81C784); // 초록색 - 채소/야채
+    if (lower.contains('수산') || lower.contains('해산')) return const Color(0xFF64B5F6); // 수산물
+    return const Color(0xFF9E9E9E); // 기타
   }
 }
